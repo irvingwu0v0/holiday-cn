@@ -498,5 +498,68 @@
       { "date": "2007-09-29", "isOffDay": false },
       { "date": "2007-09-30", "isOffDay": false }
     ]
+  },
+  {
+    "year": 2026,
+    "description": "3月21日（周六）是少数民族习惯节日肉孜节，3月20日（周五）至22日（周日）放假，共3天。",
+    "expected": [
+      { "date": "2026-03-20", "isOffDay": true },
+      { "date": "2026-03-21", "isOffDay": true },
+      { "date": "2026-03-22", "isOffDay": true }
+    ]
+  },
+  {
+    "year": 2026,
+    "description": "5月27日（周三）是少数民族习惯节日古尔邦节，5月27日（周三）至31日（周日）放假，共5天。",
+    "expected": [
+      { "date": "2026-05-27", "isOffDay": true },
+      { "date": "2026-05-28", "isOffDay": true },
+      { "date": "2026-05-29", "isOffDay": true },
+      { "date": "2026-05-30", "isOffDay": true },
+      { "date": "2026-05-31", "isOffDay": true }
+    ]
+  },
+  {
+    "year": 2026,
+    "description": "3月21日（周六），周末正常休息。",
+    "expected": [{ "date": "2026-03-21", "isOffDay": true }]
+  },
+  {
+    "year": 2026,
+    "description": "5月27日（周三）至28日（周四）放假，共2天。",
+    "expected": [
+      { "date": "2026-05-27", "isOffDay": true },
+      { "date": "2026-05-28", "isOffDay": true }
+    ]
+  },
+  {
+    "year": 2026,
+    "description": "4月18日（周六）、4月19日（周日）放假，4月17日（周五）、4月20日（周一）补休，共休4天。",
+    "expected": [
+      { "date": "2026-04-17", "isOffDay": true },
+      { "date": "2026-04-18", "isOffDay": true },
+      { "date": "2026-04-19", "isOffDay": true },
+      { "date": "2026-04-20", "isOffDay": true }
+    ]
+  },
+  {
+    "year": 2026,
+    "description": "2026年2月15日至2月26日放假调休，共12天。2月14日（周六）、2月28日（周六）上班。",
+    "expected": [
+      { "date": "2026-02-14", "isOffDay": false },
+      { "date": "2026-02-15", "isOffDay": true },
+      { "date": "2026-02-16", "isOffDay": true },
+      { "date": "2026-02-17", "isOffDay": true },
+      { "date": "2026-02-18", "isOffDay": true },
+      { "date": "2026-02-19", "isOffDay": true },
+      { "date": "2026-02-20", "isOffDay": true },
+      { "date": "2026-02-21", "isOffDay": true },
+      { "date": "2026-02-22", "isOffDay": true },
+      { "date": "2026-02-23", "isOffDay": true },
+      { "date": "2026-02-24", "isOffDay": true },
+      { "date": "2026-02-25", "isOffDay": true },
+      { "date": "2026-02-26", "isOffDay": true },
+      { "date": "2026-02-28", "isOffDay": false }
+    ]
   }
 ]

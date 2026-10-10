@@ -2,6 +2,7 @@
 """Fetch holidays from gov.cn"""
 
 import argparse
+import functools
 import json
 import re
 from datetime import date, timedelta
@@ -64,6 +65,44 @@ PRE_PARSED_PAPERS = {
             "isOffDay": False,
         },
     ],
+    "https://www.xizang.gov.cn/xwzx_406/bmkx/202602/t20260214_525301.html": [
+        {
+            "name": "春节、藏历新年",
+            "date": date(2026, 2, 14),
+            "isOffDay": False,
+        },
+        *[
+            {
+                "name": "春节、藏历新年",
+                "date": date(2026, 2, 15) + timedelta(days=i),
+                "isOffDay": True,
+            }
+            for i in range(12)
+        ],
+        {
+            "name": "春节、藏历新年",
+            "date": date(2026, 2, 28),
+            "isOffDay": False,
+        },
+    ],
+}
+
+REGIONS = ["xinjiang", "ningxia", "guangxi", "xizang", "neimenggu"]
+
+REGIONAL_PAPERS = {
+    "xinjiang": {
+        2026: [
+            "http://www.xinjiang.gov.cn/xinjiang/tzgg/202512/aaece21b6906443e8d50b981070764a8.shtml"
+        ]
+    },
+    "ningxia": {
+        2026: ["https://www.nx.gov.cn/zwgk/qzfwj/202512/t20251216_5110308.html"]
+    },
+    "guangxi": {2026: ["http://www.gxzf.gov.cn/gggs/t27317475.shtml"]},
+    "xizang": {
+        2026: ["https://www.xizang.gov.cn/xwzx_406/bmkx/202602/t20260214_525301.html"]
+    },
+    "neimenggu": {},
 }
 
 
@@ -128,6 +167,7 @@ def get_paper_urls(year: int) -> List[str]:
     return ret
 
 
+@functools.lru_cache()
 def get_paper(url: str) -> str:
     """Extract paper text from url.
 
@@ -138,18 +178,31 @@ def get_paper(url: str) -> str:
         str: Extracted paper text.
     """
 
-    response = requests.get(url)
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+            " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+    response = requests.get(url, headers=headers, verify=False, timeout=15)
     _raise_for_status_200(response)
     response.encoding = "utf-8"
     soup = bs4.BeautifulSoup(response.text, features="html.parser")
-    container = soup.find(id="UCAP-CONTENT")
+    container = (
+        soup.find(id="UCAP-CONTENT")
+        or soup.find(id="NewsContent")
+        or soup.find(id="info_content")
+        or soup.find(class_="pages_content")
+        or soup.find(class_="article-center")
+        or soup.find("div", class_="article-content")
+    )
     assert isinstance(
         container, bs4.Tag
     ), f"Can not get paper container from url: {url}"
     p = bs4.BeautifulSoup(
         container.decode().replace("<br/>", "</p><p>"), features="html.parser"
     ).find_all("p")
-    ret = "\n".join((i.get_text().strip() for i in p))
+    ret = "\n".join((i.get_text().strip() for i in p if i.get_text().strip()))
     assert ret, f"can not get paper content from url: {url}"
     return ret
 
@@ -203,9 +256,14 @@ def get_patch_rules(lines: Iterator[str]) -> Iterator[Tuple[str, str]]:
     """
     name = None
     for i in lines:
-        match = re.match(r".*\d+年([^和、]{2,})(?:假期|放假).*安排", i)
-        if match:
+        match = re.match(
+            r".*\d+年(?:度)?(?:广西|自治区)?([^和、]{2,}?)(?:假期|放假).*(?:安排|通知)",
+            i,
+        )
+        if match and "节假日" not in match.group(1):
             name = match.group(1)
+            if "三月三" in name:
+                name = "壮族三月三"
         if not name:
             continue
         match = re.match(r"^[一二三四五六七八九十]、(.+)$", i)
@@ -236,7 +294,8 @@ class DescriptionParser:
         """
 
         del self.date_history[:]
-        for i in re.split("[，。；]", self.description):
+        description = re.sub(r"，(?:周末)?正常休息", "正常休息", self.description)
+        for i in re.split("[，。；]", description):
             for j in SentenceParser(self, i).parse():
                 yield j
 
@@ -360,7 +419,9 @@ class SentenceParser:
     def _parse_rest_1(self):
         if self.sentence.startswith("不"):
             return
-        match = re.match(r"(.+)(放假|补休|调休|公休)+(?:\d+天)?$", self.sentence)
+        match = re.match(
+            r"(.+)(放假|补休|调休|公休|正常休息)+(?:\d+天)?$", self.sentence
+        )
         if match:
             for i in self.extract_dates(match.group(1)):
                 yield {"date": i, "isOffDay": True}
@@ -413,32 +474,92 @@ def parse_paper(year: int, url: str) -> Iterator[dict]:
         raise RuntimeError("Can not parse paper", url) from ex
 
 
-def fetch_holiday(year: int):
+def fetch_holiday(year: int, region: Optional[str] = None):
     """Fetch holiday data."""
+    if region is not None and region not in REGIONS:
+        raise ValueError(f"Unknown region: {region}, must be one of {REGIONS}")
 
-    papers = get_paper_urls(year)
+    if region is None:
+        papers = get_paper_urls(year)
+        days = dict()
+        for k in (j for i in papers for j in parse_paper(year, i)):
+            days[k["date"]] = k
+        return {
+            "year": year,
+            "papers": papers,
+            "days": sorted(days.values(), key=lambda x: x["date"]),
+        }
 
-    days = dict()
+    if region in ("xinjiang", "ningxia"):
+        papers = REGIONAL_PAPERS[region].get(year, [])
+        if not papers:
+            raise RuntimeError(f"could not found papers for {year} in {region}")
+        days = dict()
+        for k in (j for i in papers for j in parse_paper(year, i)):
+            days[k["date"]] = k
+        return {
+            "year": year,
+            "papers": papers,
+            "days": sorted(days.values(), key=lambda x: x["date"]),
+        }
 
-    for k in (j for i in papers for j in parse_paper(year, i)):
-        days[k["date"]] = k
+    if region == "guangxi":
+        national_data = fetch_holiday(year)
+        papers = list(national_data["papers"])
+        days = {d["date"]: d for d in national_data["days"]}
+        regional_papers = REGIONAL_PAPERS["guangxi"].get(year, [])
+        papers.extend(regional_papers)
+        for p in regional_papers:
+            for k in parse_paper(year, p):
+                days[k["date"]] = k
+        return {
+            "year": year,
+            "papers": papers,
+            "days": sorted(days.values(), key=lambda x: x["date"]),
+        }
 
-    return {
-        "year": year,
-        "papers": papers,
-        "days": sorted(days.values(), key=lambda x: x["date"]),
-    }
+    if region == "xizang":
+        national_data = fetch_holiday(year)
+        papers = list(national_data["papers"])
+        regional_papers = REGIONAL_PAPERS["xizang"].get(year, [])
+        papers.extend(regional_papers)
+        days = {d["date"]: d for d in national_data["days"] if d["name"] != "春节"}
+        for p in regional_papers:
+            for k in parse_paper(year, p):
+                days[k["date"]] = k
+        return {
+            "year": year,
+            "papers": papers,
+            "days": sorted(days.values(), key=lambda x: x["date"]),
+        }
+
+    if region == "neimenggu":
+        national_data = fetch_holiday(year)
+        return {
+            "year": year,
+            "papers": list(national_data["papers"]),
+            "days": list(national_data["days"]),
+        }
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("year", type=int)
+    parser.add_argument(
+        "--region",
+        type=str,
+        choices=REGIONS,
+        default=None,
+        help="Regional holiday to fetch",
+    )
     args = parser.parse_args()
-    year = args.year
 
     print(
         json.dumps(
-            fetch_holiday(year), indent=4, ensure_ascii=False, cls=CustomJSONEncoder
+            fetch_holiday(args.year, region=args.region),
+            indent=4,
+            ensure_ascii=False,
+            cls=CustomJSONEncoder,
         )
     )
 

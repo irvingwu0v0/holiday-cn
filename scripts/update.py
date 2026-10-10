@@ -8,14 +8,22 @@ import re
 import subprocess
 from datetime import datetime, timedelta, tzinfo
 from tempfile import mkstemp
-from typing import Iterator
+from typing import Iterator, Optional
 from zipfile import ZipFile
 
 from tqdm import tqdm
 
-from fetch import CustomJSONEncoder, fetch_holiday
+from fetch import CustomJSONEncoder, fetch_holiday, REGIONS
 from generate_ics import generate_ics
 from filetools import workspace_path
+
+REGION_NAMES = {
+    "xinjiang": "新疆",
+    "ningxia": "宁夏",
+    "guangxi": "广西",
+    "xizang": "西藏",
+    "neimenggu": "内蒙古",
+}
 
 
 class ChinaTimezone(tzinfo):
@@ -31,13 +39,14 @@ class ChinaTimezone(tzinfo):
         return timedelta()
 
 
-def update_data(year: int) -> Iterator[str]:
+def update_data(year: int, region: Optional[str] = None) -> Iterator[str]:
     """Update and store data for a year."""
 
-    json_filename = workspace_path(f"{year}.json")
-    ics_filename = workspace_path(f"{year}.ics")
+    suffix = f"_{region}" if region else ""
+    json_filename = workspace_path(f"{year}{suffix}.json")
+    ics_filename = workspace_path(f"{year}{suffix}.ics")
     with open(json_filename, "w", encoding="utf-8", newline="\n") as f:
-        data = fetch_holiday(year)
+        data = fetch_holiday(year, region=region)
 
         json.dump(
             dict(
@@ -48,7 +57,7 @@ def update_data(year: int) -> Iterator[str]:
                     ),
                     (
                         "$id",
-                        f"https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/{year}.json",
+                        f"https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/{year}{suffix}.json",
                     ),
                     *data.items(),
                 )
@@ -60,7 +69,12 @@ def update_data(year: int) -> Iterator[str]:
         )
 
     yield json_filename
-    generate_ics(data["days"], ics_filename)
+    calname = (
+        f"中国法定节假日 ({REGION_NAMES.get(region, region)})"
+        if region
+        else "中国法定节假日"
+    )
+    generate_ics(data["days"], ics_filename, calname=calname)
     yield ics_filename
 
 
@@ -85,9 +99,22 @@ def update_main_ics(fr_year, to_year):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--year",
+        type=int,
+        default=None,
+        help="Year to update, default is current year",
+    )
+    parser.add_argument(
         "--all",
         action="store_true",
         help="Update all years since 2007, default is this year and next year",
+    )
+    parser.add_argument(
+        "--region",
+        type=str,
+        choices=[*REGIONS, "all"],
+        default=None,
+        help="Update regional holidays",
     )
     parser.add_argument(
         "--release",
@@ -98,14 +125,20 @@ def main():
 
     now = datetime.now(ChinaTimezone())
     is_release = args.release
+    year = args.year or now.year
 
     filenames = []
-    progress = tqdm(range(2007 if args.all else now.year, now.year + 2))
-    for i in progress:
-        progress.set_description(f"Updating {i} data")
-        filenames += list(update_data(i))
-    progress.set_description("Updating holiday-cn.ics")
-    filenames.append(update_main_ics(now.year - 4, now.year + 1))
+    if args.region:
+        target_regions = REGIONS if args.region == "all" else [args.region]
+        for r in target_regions:
+            filenames += list(update_data(year, region=r))
+    else:
+        progress = tqdm(range(2007 if args.all else now.year, now.year + 2))
+        for i in progress:
+            progress.set_description(f"Updating {i} data")
+            filenames += list(update_data(i))
+        progress.set_description("Updating holiday-cn.ics")
+        filenames.append(update_main_ics(now.year - 4, now.year + 1))
     print("")
 
     subprocess.run(["git", "add", *filenames], check=True)
@@ -164,7 +197,7 @@ def pack_data(file):
 
     zip_file = ZipFile(file, "w")
     for i in os.listdir(workspace_path()):
-        if not re.match(r"\d+\.json", i):
+        if not re.match(r"\d+(?:_\w+)?\.json", i):
             continue
         zip_file.write(workspace_path(i), i)
 

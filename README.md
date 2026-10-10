@@ -62,6 +62,18 @@ interface Holidays {
 
 ~~`https://natescarlet.coding.net/p/github/d/holiday-cn/git/raw/master/{年份}.json`~~
 
+### 少数民族自治区节假日数据
+
+除全国统一法定节假日外，还支持部分自治区（含少数民族习惯节日）的放假安排：
+
+- 新疆维吾尔自治区 (`xinjiang`)：含肉孜节、古尔邦节
+- 宁夏回族自治区 (`ningxia`)：含开斋节、古尔邦节
+- 广西壮族自治区 (`guangxi`)：含壮族三月三
+- 西藏自治区 (`xizang`)：含春节、藏历新年
+- 内蒙古自治区 (`neimenggu`)：与全国法定节假日一致
+
+文件命名：`{年份}_{地区}.json`（例如 `2026_xinjiang.json`）及 `{年份}_{地区}.ics`（例如 `2026_xinjiang.ics`）。
+
 ## ICalendar 订阅
 
 网址格式参见上一节

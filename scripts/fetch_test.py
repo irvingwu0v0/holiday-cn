@@ -7,6 +7,7 @@ import pytest
 from fetch import (
     CustomJSONEncoder,
     DescriptionParser,
+    fetch_holiday,
     get_paper,
     get_paper_urls,
     get_rules,
@@ -81,3 +82,46 @@ def test_parse_description(case):
     assert _normalize(DescriptionParser(description, year).parse()) == _normalize(
         expected
     ), case
+
+
+def _validate_schema(data, expected_year):
+    assert data["year"] == expected_year
+    assert isinstance(data["papers"], list) and len(data["papers"]) > 0
+    assert isinstance(data["days"], list) and len(data["days"]) > 0
+    dates = []
+    for day in data["days"]:
+        assert isinstance(day["name"], str) and day["name"]
+        assert isinstance(day["date"], str)
+        assert isinstance(day["isOffDay"], bool)
+        dates.append(day["date"])
+    assert dates == sorted(dates), "Days should be sorted by date"
+
+
+@pytest.mark.parametrize(
+    "region", ["xinjiang", "ningxia", "guangxi", "xizang", "neimenggu"]
+)
+def test_fetch_holiday_regions(region):
+    raw = fetch_holiday(2026, region=region)
+    data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
+    _validate_schema(data, 2026)
+
+    holiday_names = {d["name"] for d in data["days"]}
+    if region == "xinjiang":
+        assert "肉孜节" in holiday_names
+        assert "古尔邦节" in holiday_names
+    elif region == "ningxia":
+        assert "开斋节" in holiday_names
+        assert "古尔邦节" in holiday_names
+    elif region == "guangxi":
+        assert "壮族三月三" in holiday_names
+    elif region == "xizang":
+        assert "春节、藏历新年" in holiday_names
+        assert "春节" not in holiday_names
+    elif region == "neimenggu":
+        assert "春节" in holiday_names
+        assert "国庆节" in holiday_names
+
+
+def test_fetch_holiday_invalid_region():
+    with pytest.raises(ValueError):
+        fetch_holiday(2026, region="invalid_region")

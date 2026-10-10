@@ -60,10 +60,12 @@ def _iter_date_ranges(days: Sequence[dict]) -> Iterator[Tuple[dict, dict]]:
     yield fr, to
 
 
-def generate_ics(days: Sequence[dict], filename: Text) -> None:
+def generate_ics(
+    days: Sequence[dict], filename: Text, calname: Text = "中国法定节假日"
+) -> None:
     """Generate ics from days."""
     cal = Calendar()
-    cal.add("X-WR-CALNAME", "中国法定节假日")
+    cal.add("X-WR-CALNAME", calname)
     cal.add("X-WR-CALDESC", "中国法定节假日数据，自动每日抓取国务院公告。")
     cal.add("VERSION", "2.0")
     cal.add("METHOD", "PUBLISH")
