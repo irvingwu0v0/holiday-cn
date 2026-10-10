@@ -308,6 +308,9 @@ def _get_xinjiang_paper_urls(year: int) -> Iterator[str]:
             for it in items:
                 title = it.get("title", "").replace("<span>", "").replace("</span>", "")
                 url = it.get("url") or it.get("docPubUrl") or ""
+                url = url.replace(
+                    "https://www.xinjiang.gov.cn", "http://www.xinjiang.gov.cn"
+                )
                 if (
                     f"{year}年" in title
                     and "节假日" in title
@@ -674,7 +677,13 @@ def fetch_holiday(year: int, region: Optional[str] = None):
     if region in ("xinjiang", "ningxia"):
         papers = get_regional_paper_urls(region, year)
         if not papers:
-            raise RuntimeError(f"could not found papers for {year} in {region}")
+            if date.today().year >= year:
+                raise RuntimeError(f"could not found papers for {year} in {region}")
+            return {
+                "year": year,
+                "papers": [],
+                "days": [],
+            }
         days = dict()
         for k in (j for i in papers for j in parse_paper(year, i)):
             days[k["date"]] = k

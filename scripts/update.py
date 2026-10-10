@@ -137,6 +137,12 @@ def main():
         for i in progress:
             progress.set_description(f"Updating {i} data")
             filenames += list(update_data(i))
+            if i >= 2026:
+                for r in REGIONS:
+                    try:
+                        filenames += list(update_data(i, region=r))
+                    except Exception as e:
+                        print(f"Warning: failed to update {i}_{r}: {e}")
         progress.set_description("Updating holiday-cn.ics")
         filenames.append(update_main_ics(now.year - 4, now.year + 1))
     print("")
