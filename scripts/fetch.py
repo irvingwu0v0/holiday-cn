@@ -91,14 +91,28 @@ REGIONS = ["xinjiang", "ningxia", "guangxi", "xizang", "neimenggu"]
 
 REGIONAL_PAPERS = {
     "xinjiang": {
+        2024: [
+            "http://lswz.xinjiang.gov.cn/xjgrain/tzgg/202402/32460e4f20f249f4a3a19e62aea3593c.shtml"
+        ],
+        2025: [
+            "http://www.xinjiang.gov.cn/xinjiang/tzgg/202412/01242215d31b4ede946837906c473b7c.shtml"
+        ],
         2026: [
             "http://www.xinjiang.gov.cn/xinjiang/tzgg/202512/aaece21b6906443e8d50b981070764a8.shtml"
-        ]
+        ],
     },
     "ningxia": {
-        2026: ["https://www.nx.gov.cn/zwgk/qzfwj/202512/t20251216_5110308.html"]
+        2023: ["https://www.nx.gov.cn/zwgk/qzfwj/202212/t20221230_3900106.html"],
+        2024: ["https://www.nx.gov.cn/zwgk/qzfwj/202312/t20231218_4387767.html"],
+        2025: ["https://www.nx.gov.cn/zwgk/qzfwj/202412/t20241223_4767357.html"],
+        2026: ["https://www.nx.gov.cn/zwgk/qzfwj/202512/t20251216_5110308.html"],
     },
-    "guangxi": {2026: ["http://www.gxzf.gov.cn/gggs/t27317475.shtml"]},
+    "guangxi": {
+        2023: ["http://www.gxzf.gov.cn/gggs/t16001206.shtml"],
+        2024: ["http://www.gxzf.gov.cn/gggs/t18173750.shtml"],
+        2025: ["http://www.gxzf.gov.cn/gggs/t19661326.shtml"],
+        2026: ["http://www.gxzf.gov.cn/gggs/t27317475.shtml"],
+    },
     "xizang": {
         2026: ["https://www.xizang.gov.cn/xwzx_406/bmkx/202602/t20260214_525301.html"]
     },
@@ -167,6 +181,158 @@ def get_paper_urls(year: int) -> List[str]:
     return ret
 
 
+def _get_guangxi_paper_urls(year: int) -> Iterator[str]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        resp = requests.post(
+            "https://api.so-gov.cn/query/s",
+            data={
+                "siteCode": "4500000123",
+                "tab": "all",
+                "qt": f"{year}年 壮族三月三 放假",
+            },
+            headers=headers,
+            verify=False,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            docs = resp.json().get("resultDocs", [])
+            for d in docs:
+                data = d.get("data", {})
+                title = data.get("title", "").replace("<em>", "").replace("</em>", "")
+                url = data.get("url", "")
+                if (
+                    f"{year}年" in title
+                    and "三月三" in title
+                    and ("放假" in title or "安排" in title)
+                    and "/gggs/" in url
+                ):
+                    yield url
+    except Exception:
+        pass
+
+
+def _get_ningxia_paper_urls(year: int) -> Iterator[str]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Content-Type": "application/json",
+    }
+    search_params = {
+        "code": "17c793b087e",
+        "sorts": [{"sortField": "f_20211027344499", "sortOrder": "DESC"}],
+        "granularity": "ALL",
+        "historySearchWords": [],
+        "pageSize": 10,
+        "pageNo": 1,
+        "tableName": "t_17c0cde31e1",
+        "analyzerType": "none",
+        "customFilter": {
+            "operator": "and",
+            "properties": [
+                {
+                    "property": "f_2021924588154",
+                    "operator": "eq",
+                    "value": f"{year}年部分节假日",
+                }
+            ],
+            "filters": [
+                {
+                    "operator": "or",
+                    "properties": [
+                        {
+                            "property": "f_2021924985750",
+                            "operator": "eq",
+                            "value": "22751",
+                        },
+                        {
+                            "property": "f_2021924985750",
+                            "operator": "eq",
+                            "value": "22753",
+                        },
+                    ],
+                }
+            ],
+        },
+        "tenantId": 19,
+    }
+    try:
+        resp = requests.post(
+            "https://www.nx.gov.cn/irs/front/list",
+            json=search_params,
+            headers=headers,
+            verify=False,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            items = resp.json().get("data", {}).get("list", [])
+            for it in items:
+                url = it.get("doc_pub_url")
+                if url:
+                    yield url
+    except Exception:
+        pass
+
+
+def _get_xinjiang_paper_urls(year: int) -> Iterator[str]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        resp = requests.post(
+            "https://www.xinjiang.gov.cn/search5/search/s",
+            data={
+                "siteCode": "6500000034",
+                "searchWord": f"{year}年 节假日",
+                "column": "全部",
+            },
+            headers=headers,
+            verify=False,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            xj = resp.json()
+            items = xj.get("searchResultAll", {}).get("searchTotal", []) + xj.get(
+                "searchResultAll", {}
+            ).get("intelligentRecommend", [])
+            for it in items:
+                title = it.get("title", "").replace("<span>", "").replace("</span>", "")
+                url = it.get("url") or it.get("docPubUrl") or ""
+                if (
+                    f"{year}年" in title
+                    and "节假日" in title
+                    and "人民政府办公厅" in title
+                    and ("tzgg" in url or "xinjiang.gov.cn" in url)
+                ):
+                    yield url
+    except Exception:
+        pass
+
+
+def get_regional_paper_urls(region: str, year: int) -> List[str]:
+    """Find region related paper urls dynamically or from fallback."""
+    urls = []
+    if region == "guangxi":
+        urls = list(dict.fromkeys(_get_guangxi_paper_urls(year)))
+    elif region == "ningxia":
+        urls = list(dict.fromkeys(_get_ningxia_paper_urls(year)))
+    elif region == "xinjiang":
+        urls = list(dict.fromkeys(_get_xinjiang_paper_urls(year)))
+    if not urls:
+        urls = REGIONAL_PAPERS.get(region, {}).get(year, [])
+    return urls
+
+
 @functools.lru_cache()
 def get_paper(url: str) -> str:
     """Extract paper text from url.
@@ -195,6 +361,9 @@ def get_paper(url: str) -> str:
         or soup.find(class_="pages_content")
         or soup.find(class_="article-center")
         or soup.find("div", class_="article-content")
+        or soup.find("div", class_="content_p")
+        or soup.find(class_="contentbox")
+        or soup.find(class_="TRS_UEDITOR")
     )
     assert isinstance(
         container, bs4.Tag
@@ -240,9 +409,17 @@ def get_normal_rules(lines: Iterator[str]) -> Iterator[Tuple[str, str]]:
         Iterator[Tuple[str, str]]: (name, description)
     """
     for i in lines:
-        match = re.match(r"[一二三四五六七八九十]、(.+?)：(.+)", i)
+        match = re.match(
+            r"^(?:[（\(]?[一二三四五六七八九十]+[）\)]|[一二三四五六七八九十]+、)\s*(.+?)：\s*(.+)$",
+            i,
+        )
         if match:
-            yield match.groups()
+            name, desc = match.group(1), match.group(2)
+            if "作息" in name or not any(
+                k in desc for k in ("放假", "休息", "上班", "调休")
+            ):
+                continue
+            yield name, desc
 
 
 def get_patch_rules(lines: Iterator[str]) -> Iterator[Tuple[str, str]]:
@@ -294,7 +471,11 @@ class DescriptionParser:
         """
 
         del self.date_history[:]
-        description = re.sub(r"，(?:周末)?正常休息", "正常休息", self.description)
+        description = self.description
+        description = re.sub(r"(\d+)\s+([月日])", r"\1\2", description)
+        description = re.sub(r"，(?:周末)?正常休息", "正常休息", description)
+        description = re.sub(r"按照.+?执行[，、]?", "", description)
+        description = re.sub(r"是[^，。；]+节[，、]?", "", description)
         for i in re.split("[，。；]", description):
             for j in SentenceParser(self, i).parse():
                 yield j
@@ -427,7 +608,7 @@ class SentenceParser:
                 yield {"date": i, "isOffDay": True}
 
     def _parse_work_1(self):
-        match = re.match("(.+)上班$", self.sentence)
+        match = re.match(r"(?:正常)?(.+?)(?:正常)?上班$", self.sentence)
         if match:
             for i in self.extract_dates(match.group(1)):
                 yield {"date": i, "isOffDay": False}
@@ -491,7 +672,7 @@ def fetch_holiday(year: int, region: Optional[str] = None):
         }
 
     if region in ("xinjiang", "ningxia"):
-        papers = REGIONAL_PAPERS[region].get(year, [])
+        papers = get_regional_paper_urls(region, year)
         if not papers:
             raise RuntimeError(f"could not found papers for {year} in {region}")
         days = dict()
@@ -507,7 +688,7 @@ def fetch_holiday(year: int, region: Optional[str] = None):
         national_data = fetch_holiday(year)
         papers = list(national_data["papers"])
         days = {d["date"]: d for d in national_data["days"]}
-        regional_papers = REGIONAL_PAPERS["guangxi"].get(year, [])
+        regional_papers = get_regional_paper_urls("guangxi", year)
         papers.extend(regional_papers)
         for p in regional_papers:
             for k in parse_paper(year, p):
@@ -521,7 +702,7 @@ def fetch_holiday(year: int, region: Optional[str] = None):
     if region == "xizang":
         national_data = fetch_holiday(year)
         papers = list(national_data["papers"])
-        regional_papers = REGIONAL_PAPERS["xizang"].get(year, [])
+        regional_papers = get_regional_paper_urls("xizang", year)
         papers.extend(regional_papers)
         days = {d["date"]: d for d in national_data["days"] if d["name"] != "春节"}
         for p in regional_papers:

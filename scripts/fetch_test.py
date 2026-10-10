@@ -125,3 +125,31 @@ def test_fetch_holiday_regions(region):
 def test_fetch_holiday_invalid_region():
     with pytest.raises(ValueError):
         fetch_holiday(2026, region="invalid_region")
+
+
+@pytest.mark.parametrize("year", [2024, 2025])
+def test_fetch_holiday_multi_year_ningxia(year):
+    raw = fetch_holiday(year, region="ningxia")
+    data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
+    _validate_schema(data, year)
+    holiday_names = {d["name"] for d in data["days"]}
+    assert "开斋节" in holiday_names
+    assert "古尔邦节" in holiday_names
+
+
+@pytest.mark.parametrize("year", [2024, 2025])
+def test_fetch_holiday_multi_year_guangxi(year):
+    raw = fetch_holiday(year, region="guangxi")
+    data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
+    _validate_schema(data, year)
+    holiday_names = {d["name"] for d in data["days"]}
+    assert "壮族三月三" in holiday_names
+
+
+def test_fetch_holiday_multi_year_xinjiang():
+    raw = fetch_holiday(2025, region="xinjiang")
+    data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
+    _validate_schema(data, 2025)
+    holiday_names = {d["name"] for d in data["days"]}
+    assert "肉孜节" in holiday_names
+    assert "古尔邦节" in holiday_names
