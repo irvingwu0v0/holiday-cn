@@ -9,6 +9,13 @@ from datetime import date, timedelta
 from itertools import chain
 from typing import Iterator, List, Optional, Tuple
 
+import hashlib
+import os
+
+try:
+    from filetools import workspace_path
+except ImportError:
+    from scripts.filetools import workspace_path
 import bs4
 import requests
 
@@ -209,7 +216,7 @@ def _get_guangxi_paper_urls(year: int) -> Iterator[str]:
             },
             headers=headers,
             verify=False,
-            timeout=10,
+            timeout=5 if os.getenv("CI") else 10,
         )
         if resp.status_code == 200:
             docs = resp.json().get("resultDocs", [])
@@ -280,7 +287,7 @@ def _get_ningxia_paper_urls(year: int) -> Iterator[str]:
             json=search_params,
             headers=headers,
             verify=False,
-            timeout=10,
+            timeout=5 if os.getenv("CI") else 10,
         )
         if resp.status_code == 200:
             items = resp.json().get("data", {}).get("list", [])
@@ -309,7 +316,7 @@ def _get_xinjiang_paper_urls(year: int) -> Iterator[str]:
             },
             headers=headers,
             verify=False,
-            timeout=10,
+            timeout=5 if os.getenv("CI") else 10,
         )
         if resp.status_code == 200:
             xj = resp.json()
@@ -346,7 +353,8 @@ def _get_xizang_paper_urls(year: int) -> Iterator[str]:
             f"&searchWord={year}%E5%B9%B4+%E8%97%8F%E5%8E%86%E6%96%B0%E5%B9%B4+%E6%94%BE%E5%81%87"
             f"&columnId=0&siteCode=5401000001"
         )
-        resp = requests.get(url, headers=headers, timeout=10)
+        timeout = 5 if os.getenv("CI") else 10
+        resp = requests.get(url, headers=headers, timeout=timeout)
         if resp.status_code == 200:
             soup = bs4.BeautifulSoup(resp.text, features="html.parser")
             for a in soup.find_all("a"):
@@ -392,36 +400,53 @@ def get_paper(url: str) -> str:
         str: Extracted paper text.
     """
 
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-            " like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-    }
-    response = requests.get(url, headers=headers, verify=False, timeout=15)
-    _raise_for_status_200(response)
-    response.encoding = "utf-8"
-    soup = bs4.BeautifulSoup(response.text, features="html.parser")
-    container = (
-        soup.find(id="UCAP-CONTENT")
-        or soup.find(id="NewsContent")
-        or soup.find(id="info_content")
-        or soup.find(class_="pages_content")
-        or soup.find(class_="article-center")
-        or soup.find("div", class_="article-content")
-        or soup.find("div", class_="content_p")
-        or soup.find(class_="contentbox")
-        or soup.find(class_="TRS_UEDITOR")
+    cache_file = workspace_path(
+        "scripts", "cache", f"{hashlib.sha256(url.encode('utf-8')).hexdigest()}.txt"
     )
-    assert isinstance(
-        container, bs4.Tag
-    ), f"Can not get paper container from url: {url}"
-    p = bs4.BeautifulSoup(
-        container.decode().replace("<br/>", "</p><p>"), features="html.parser"
-    ).find_all("p")
-    ret = "\n".join((i.get_text().strip() for i in p if i.get_text().strip()))
-    assert ret, f"can not get paper content from url: {url}"
-    return ret
+    timeout = 5 if os.getenv("CI") else 15
+
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+                " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+        }
+        response = requests.get(url, headers=headers, verify=False, timeout=timeout)
+        _raise_for_status_200(response)
+        response.encoding = "utf-8"
+        soup = bs4.BeautifulSoup(response.text, features="html.parser")
+        container = (
+            soup.find(id="UCAP-CONTENT")
+            or soup.find(id="NewsContent")
+            or soup.find(id="info_content")
+            or soup.find(class_="pages_content")
+            or soup.find(class_="article-center")
+            or soup.find("div", class_="article-content")
+            or soup.find("div", class_="content_p")
+            or soup.find(class_="contentbox")
+            or soup.find(class_="TRS_UEDITOR")
+        )
+        assert isinstance(
+            container, bs4.Tag
+        ), f"Can not get paper container from url: {url}"
+        p = bs4.BeautifulSoup(
+            container.decode().replace("<br/>", "</p><p>"), features="html.parser"
+        ).find_all("p")
+        ret = "\n".join((i.get_text().strip() for i in p if i.get_text().strip()))
+        assert ret, f"can not get paper content from url: {url}"
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, "w", encoding="utf-8") as f:
+                f.write(ret)
+        except Exception:
+            pass
+        return ret
+    except Exception as ex:
+        if os.path.isfile(cache_file):
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return f.read()
+        raise ex
 
 
 def get_rules(paper: str) -> Iterator[Tuple[str, str]]:

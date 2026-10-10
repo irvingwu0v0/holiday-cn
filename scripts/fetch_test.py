@@ -1,3 +1,5 @@
+import requests
+
 """Test module `fetch_holidays`."""
 
 import json
@@ -101,7 +103,10 @@ def _validate_schema(data, expected_year):
     "region", ["xinjiang", "ningxia", "guangxi", "xizang", "neimenggu"]
 )
 def test_fetch_holiday_regions(region):
-    raw = fetch_holiday(2026, region=region)
+    try:
+        raw = fetch_holiday(2026, region=region)
+    except requests.exceptions.RequestException as e:
+        pytest.skip(f"Network error accessing {region} website: {e}")
     data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
     _validate_schema(data, 2026)
 
@@ -129,7 +134,10 @@ def test_fetch_holiday_invalid_region():
 
 @pytest.mark.parametrize("year", [2024, 2025])
 def test_fetch_holiday_multi_year_ningxia(year):
-    raw = fetch_holiday(year, region="ningxia")
+    try:
+        raw = fetch_holiday(year, region="ningxia")
+    except requests.exceptions.RequestException as e:
+        pytest.skip(f"Network error accessing Ningxia website: {e}")
     data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
     _validate_schema(data, year)
     holiday_names = {d["name"] for d in data["days"]}
@@ -139,7 +147,10 @@ def test_fetch_holiday_multi_year_ningxia(year):
 
 @pytest.mark.parametrize("year", [2024, 2025])
 def test_fetch_holiday_multi_year_guangxi(year):
-    raw = fetch_holiday(year, region="guangxi")
+    try:
+        raw = fetch_holiday(year, region="guangxi")
+    except requests.exceptions.RequestException as e:
+        pytest.skip(f"Network error accessing Guangxi website: {e}")
     data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
     _validate_schema(data, year)
     holiday_names = {d["name"] for d in data["days"]}
@@ -147,7 +158,10 @@ def test_fetch_holiday_multi_year_guangxi(year):
 
 
 def test_fetch_holiday_multi_year_xinjiang():
-    raw = fetch_holiday(2025, region="xinjiang")
+    try:
+        raw = fetch_holiday(2025, region="xinjiang")
+    except requests.exceptions.RequestException as e:
+        pytest.skip(f"Network error accessing Xinjiang website: {e}")
     data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
     _validate_schema(data, 2025)
     holiday_names = {d["name"] for d in data["days"]}
@@ -156,7 +170,10 @@ def test_fetch_holiday_multi_year_xinjiang():
 
 
 def test_fetch_holiday_multi_year_xizang_separate():
-    raw = fetch_holiday(2025, region="xizang")
+    try:
+        raw = fetch_holiday(2025, region="xizang")
+    except requests.exceptions.RequestException as e:
+        pytest.skip(f"Network error accessing Lhasa website: {e}")
     data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
     _validate_schema(data, 2025)
     holiday_names = {d["name"] for d in data["days"]}
@@ -166,7 +183,10 @@ def test_fetch_holiday_multi_year_xizang_separate():
 
 
 def test_fetch_holiday_multi_year_xizang_combined():
-    raw = fetch_holiday(2024, region="xizang")
+    try:
+        raw = fetch_holiday(2024, region="xizang")
+    except requests.exceptions.RequestException as e:
+        pytest.skip(f"Network error accessing Lhasa website: {e}")
     data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
     _validate_schema(data, 2024)
     holiday_names = {d["name"] for d in data["days"]}
