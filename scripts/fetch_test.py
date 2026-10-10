@@ -153,3 +153,22 @@ def test_fetch_holiday_multi_year_xinjiang():
     holiday_names = {d["name"] for d in data["days"]}
     assert "肉孜节" in holiday_names
     assert "古尔邦节" in holiday_names
+
+
+def test_fetch_holiday_multi_year_xizang_separate():
+    raw = fetch_holiday(2025, region="xizang")
+    data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
+    _validate_schema(data, 2025)
+    holiday_names = {d["name"] for d in data["days"]}
+    assert "春节" in holiday_names
+    assert "藏历新年" in holiday_names
+    assert "春节、藏历新年" not in holiday_names
+
+
+def test_fetch_holiday_multi_year_xizang_combined():
+    raw = fetch_holiday(2024, region="xizang")
+    data = json.loads(json.dumps(raw, cls=CustomJSONEncoder))
+    _validate_schema(data, 2024)
+    holiday_names = {d["name"] for d in data["days"]}
+    assert "春节、藏历新年" in holiday_names
+    assert "春节" not in holiday_names

@@ -114,7 +114,18 @@ REGIONAL_PAPERS = {
         2026: ["http://www.gxzf.gov.cn/gggs/t27317475.shtml"],
     },
     "xizang": {
-        2026: ["https://www.xizang.gov.cn/xwzx_406/bmkx/202602/t20260214_525301.html"]
+        2023: [
+            "http://www.lasa.gov.cn/lasa/tggs/202302/92009f75a2a746268888d93e55024b52.shtml"
+        ],
+        2024: [
+            "http://www.lasa.gov.cn/lasa/tggs/202401/0ceebdd88bb54d9ca8ca296efc8f364f.shtml"
+        ],
+        2025: [
+            "http://www.lasa.gov.cn/lasa/tggs/202502/d797f554aae04eb1930766d0f6a56f90.shtml"
+        ],
+        2026: [
+            "http://www.lasa.gov.cn/lasa/tggs/202601/f87553d7183d439fb044eca99fcbf225.shtml"
+        ],
     },
     "neimenggu": {},
 }
@@ -322,6 +333,38 @@ def _get_xinjiang_paper_urls(year: int) -> Iterator[str]:
         pass
 
 
+def _get_xizang_paper_urls(year: int) -> Iterator[str]:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        url = (
+            f"http://sousuo.www.lasa.gov.cn/search4/s?column=%E5%85%A8%E9%83%A8"
+            f"&searchWord={year}%E5%B9%B4+%E8%97%8F%E5%8E%86%E6%96%B0%E5%B9%B4+%E6%94%BE%E5%81%87"
+            f"&columnId=0&siteCode=5401000001"
+        )
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            soup = bs4.BeautifulSoup(resp.text, features="html.parser")
+            for a in soup.find_all("a"):
+                href = a.get("href", "")
+                title = a.get_text(strip=True)
+                if (
+                    str(year) in title
+                    and "藏历新年" in title
+                    and "放假" in title
+                    and "解读" not in title
+                    and "咨询" not in title
+                    and "/tggs/" in href
+                ):
+                    yield href
+    except Exception:
+        pass
+
+
 def get_regional_paper_urls(region: str, year: int) -> List[str]:
     """Find region related paper urls dynamically or from fallback."""
     urls = []
@@ -331,6 +374,8 @@ def get_regional_paper_urls(region: str, year: int) -> List[str]:
         urls = list(dict.fromkeys(_get_ningxia_paper_urls(year)))
     elif region == "xinjiang":
         urls = list(dict.fromkeys(_get_xinjiang_paper_urls(year)))
+    elif region == "xizang":
+        urls = list(dict.fromkeys(_get_xizang_paper_urls(year)))
     if not urls:
         urls = REGIONAL_PAPERS.get(region, {}).get(year, [])
     return urls
@@ -392,7 +437,7 @@ def get_rules(paper: str) -> Iterator[Tuple[str, str]]:
         Iterator[Tuple[str, str]]: (name, description)
     """
 
-    lines: list = paper.splitlines()
+    lines: list = [i.strip() for i in paper.splitlines() if i.strip()]
     lines = sorted(set(lines), key=lines.index)
     count = 0
     for i in chain(get_normal_rules(lines), get_patch_rules(lines)):
@@ -436,6 +481,16 @@ def get_patch_rules(lines: Iterator[str]) -> Iterator[Tuple[str, str]]:
     """
     name = None
     for i in lines:
+        cleaned_i = re.sub(r"\s+", "", i)
+        lhasa_match = re.match(
+            r"^\d+年(春节[、及]藏历新年|藏历新年).*?(?:即[：:]|时间为)(.+)",
+            cleaned_i,
+        )
+        if lhasa_match:
+            holiday_name = lhasa_match.group(1).replace("及", "、")
+            desc = lhasa_match.group(2)
+            yield holiday_name, desc
+            continue
         match = re.match(
             r".*\d+年(?:度)?(?:广西|自治区)?([^和、]{2,}?)(?:假期|放假).*(?:安排|通知)",
             i,
@@ -479,6 +534,11 @@ class DescriptionParser:
         description = re.sub(r"，(?:周末)?正常休息", "正常休息", description)
         description = re.sub(r"按照.+?执行[，、]?", "", description)
         description = re.sub(r"是[^，。；]+节[，、]?", "", description)
+        description = re.sub(r"鼓励各单位.+", "", description)
+        description = re.sub(
+            r"^((?:\d+年)?\d+月\d+日至\d+月\d+日)[，、]", r"\g<1>放假，", description
+        )
+        description = re.sub(r"放假时间为([^，。；]+)", r"\g<1>放假", description)
         for i in re.split("[，。；]", description):
             for j in SentenceParser(self, i).parse():
                 yield j
@@ -713,10 +773,14 @@ def fetch_holiday(year: int, region: Optional[str] = None):
         papers = list(national_data["papers"])
         regional_papers = get_regional_paper_urls("xizang", year)
         papers.extend(regional_papers)
-        days = {d["date"]: d for d in national_data["days"] if d["name"] != "春节"}
-        for p in regional_papers:
-            for k in parse_paper(year, p):
-                days[k["date"]] = k
+        regional_days = [k for p in regional_papers for k in parse_paper(year, p)]
+        is_combined = any("春节" in d.get("name", "") for d in regional_days)
+        if is_combined:
+            days = {d["date"]: d for d in national_data["days"] if d["name"] != "春节"}
+        else:
+            days = {d["date"]: d for d in national_data["days"]}
+        for k in regional_days:
+            days[k["date"]] = k
         return {
             "year": year,
             "papers": papers,
